@@ -1,0 +1,336 @@
+import 'dart:convert';
+
+import 'package:cm_app/init/default_app.dart';
+import 'package:flutter/material.dart';
+import 'package:cm_app/generated/i18n.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:provider/provider.dart';
+import 'package:web_socket_channel/io.dart';
+
+import 'sputils.dart';
+
+//状态管理
+class Store {
+  Store._internal();
+
+  //全局初始化
+  static init(Widget child) {
+    //多个Provider
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+            create: (_) => AppTheme(getDefaultTheme(), getDefaultBrightness())),
+        ChangeNotifierProvider.value(value: LocaleModel(SPUtils.getLocale())),
+        ChangeNotifierProvider.value(value: UserProfile(SPUtils.getToken(), SPUtils.getUserName(), SPUtils.getUsername(), SPUtils.getWorkshopList(),
+        SPUtils.getUserId(), SPUtils.getUser(), SPUtils.getDeptId(), SPUtils.getDeptName())),
+        ChangeNotifierProvider.value(value: AppStatus(TAB_HOME_INDEX)),
+        ChangeNotifierProvider.value(value: WebSocketProvider())
+      ],
+      child: child,
+    );
+  }
+
+  //获取值 of(context)  这个会引起页面的整体刷新，如果全局是页面级别的
+  static T value<T>(BuildContext context, {bool listen = false}) {
+    return Provider.of<T>(context, listen: listen);
+  }
+
+  //获取值 of(context)  这个会引起页面的整体刷新，如果全局是页面级别的
+  static T of<T>(BuildContext context, {bool listen = true}) {
+    return Provider.of<T>(context, listen: listen);
+  }
+
+  // 不会引起页面的刷新，只刷新了 Consumer 的部分，极大地缩小你的控件刷新范围
+  static Consumer connect<T>({builder, child}) {
+    return Consumer<T>(builder: builder, child: child);
+  }
+}
+
+MaterialColor getDefaultTheme() {
+  return AppTheme.materialColors[SPUtils.getThemeIndex() ?? 0];
+}
+
+Brightness getDefaultBrightness() {
+  return SPUtils.getBrightness() ?? Brightness.light;
+}
+
+///主题
+class AppTheme with ChangeNotifier {
+  static final List<MaterialColor> materialColors = [
+    Colors.blue,
+    Colors.lightBlue,
+    Colors.red,
+    Colors.pink,
+    Colors.purple,
+    Colors.grey,
+    Colors.orange,
+    Colors.amber,
+    Colors.yellow,
+    Colors.lightGreen,
+    Colors.green,
+    Colors.lime
+  ];
+
+  MaterialColor _themeColor;
+
+  Brightness _brightness;
+
+  AppTheme(this._themeColor, this._brightness);
+
+  void setColor(MaterialColor color) {
+    _themeColor = color;
+    notifyListeners();
+  }
+
+  void changeColor(int index) {
+    _themeColor = materialColors[index];
+    SPUtils.saveThemeIndex(index);
+    notifyListeners();
+  }
+
+  void setBrightness(bool isLight) {
+    notifyListeners();
+  }
+
+  void changeBrightness(bool isDark) {
+    _brightness = isDark ? Brightness.dark : Brightness.light;
+    SPUtils.saveBrightness(isDark);
+    notifyListeners();
+  }
+
+  get themeColor => _themeColor;
+
+  get brightness => _brightness;
+}
+
+///跟随系统
+const String LOCALE_FOLLOW_SYSTEM = "auto";
+
+///语言
+class LocaleModel with ChangeNotifier {
+  // 获取当前用户的APP语言配置Locale类，如果为null，则语言跟随系统语言
+  Locale? getLocale() {
+    if (_locale == LOCALE_FOLLOW_SYSTEM) return null;
+    var t = _locale.split("_");
+    return Locale(t[0], t[1]);
+  }
+
+  String _locale = LOCALE_FOLLOW_SYSTEM;
+
+  LocaleModel(this._locale);
+
+  // 获取当前Locale的字符串表示
+  String get locale => _locale;
+
+  // 用户改变APP语言后，通知依赖项更新，新语言会立即生效
+  set locale(String locale) {
+    if (_locale != locale) {
+      _locale = locale;
+      I18n.locale = getLocale()!;
+      SPUtils.saveLocale(_locale);
+      notifyListeners();
+    }
+  }
+}
+
+///用户账户信息
+class UserProfile with ChangeNotifier {
+  String _token;
+  String _userName;
+  String _username;
+  List<String> _workshopList;
+  int _userId;
+  String _user;
+  int _deptId;
+  String _deptName;
+
+
+  UserProfile(this._token, this._userName, this._username, this._workshopList, this._userId, this._user, this._deptId, this._deptName);
+
+  String get token => _token;
+  String get userName => _userName;
+  String get username => _username;
+  List<String> get workshopList => _workshopList;
+  int get userId => _userId;
+  String get user => _user;
+  int get deptId => _deptId;
+  String get deptName => _deptName;
+
+
+  set token(String token) {
+    _token = token;
+    SPUtils.saveToken(token);
+    notifyListeners();
+  }
+
+  set userName(String userName) {
+    _userName = userName;
+    SPUtils.saveUserName(userName);
+    notifyListeners();
+  }
+
+  set username(String username) {
+    _username = username;
+    SPUtils.saveUsername(username);
+    notifyListeners();
+  }
+
+  set workshopList(List<String> workshopList) {
+    _workshopList = workshopList;
+    SPUtils.saveWorkshopList(workshopList);
+    notifyListeners();
+  }
+
+  set userId(int userId) {
+    _userId = userId;
+    SPUtils.saveUserId(userId);
+    notifyListeners();
+  }
+
+  set user(String user) {
+    _user = user;
+    SPUtils.saveUser(user);
+    notifyListeners();
+  }
+
+  set deptId(int deptId) {
+    _deptId = deptId;
+    SPUtils.saveDeptId(deptId);
+    notifyListeners();
+  }
+
+  set deptName(String deptName) {
+    _deptName = deptName;
+    SPUtils.saveDeptName(deptName);
+    notifyListeners();
+  }
+}
+
+///首页
+const int TAB_HOME_INDEX = 0;
+///活动
+// const int TAB_ACTIVITY_INDEX = 1;
+
+///消息
+const int TAB_MESSAGE_INDEX = 1;
+
+///我的
+const int TAB_PROFILE_INDEX = 2;
+
+///应用状态
+class AppStatus with ChangeNotifier {
+  //首页tab的索引
+  int _tabIndex;
+
+  AppStatus(this._tabIndex);
+
+  int get tabIndex => _tabIndex;
+
+  set tabIndex(int index) {
+    _tabIndex = index;
+    notifyListeners();
+  }
+}
+
+class WebSocketProvider extends ChangeNotifier {
+  bool _showBadge = false;
+
+  bool get showBadge => _showBadge;
+
+  void updateBadgeCount(bool show) {
+    _showBadge = show;
+    notifyListeners();
+  }
+}
+
+class WebSocketManager {
+  static IOWebSocketChannel? _webSocketChannel;
+  static bool _isConnected = false;
+  static bool _isReconnecting = false;
+
+  static bool isConnected() => _isConnected;
+
+  static void connectWebSocket(String url, BuildContext context) {
+    if (_webSocketChannel == null) {
+      _webSocketChannel = IOWebSocketChannel.connect(url);
+      _isConnected = true;
+      _isReconnecting = false;
+      _webSocketChannel!.stream.listen(
+          (message) {
+            // 处理从服务器接收到的数据
+              var jsonMap = json.decode(message);
+              print('aaaaaaaaaa$jsonMap');
+              showNotification(jsonMap);
+              Future.delayed(Duration(milliseconds: 200), () {
+                Provider.of<WebSocketProvider>(context, listen: false).updateBadgeCount(true);
+              });
+        },
+        onError: (error) {
+          print('WebSocket Error: $error');
+          _reconnect(url,context);
+        },
+        onDone: () {
+          print('WebSocket Disconnected');
+          _reconnect(url,context);
+        },
+      );
+    }
+  }
+
+  static void sendWebSocketMessage(String message) {
+    if (_webSocketChannel != null && _webSocketChannel!.sink != null) {
+      _webSocketChannel!.sink.add(message);
+    }
+  }
+
+  static void disconnectWebSocket() {
+    _webSocketChannel?.sink.close();
+    _webSocketChannel = null;
+    _isConnected = false;
+    _isReconnecting = false;
+  }
+
+  static void _reconnect(String url, BuildContext context) async {
+    if (!_isReconnecting) {
+      _isReconnecting = true;
+      Future.delayed(Duration(seconds: 5), () {
+        if (_isConnected) {
+          _webSocketChannel?.sink.close();
+          _webSocketChannel = null;
+          _isConnected = false;
+          connectWebSocket(url, context);
+        }
+        _isReconnecting = false;
+      });
+    }
+  }
+
+  static Stream<dynamic>? getWebSocketStream() {
+    return _webSocketChannel?.stream;
+  }
+
+  static Future<void> showNotification(message) async{
+    final androidDetail  =
+    AndroidNotificationDetails(
+      '1111',
+      '诚模智造',
+      channelDescription: 'color background channel description',
+      importance: Importance.max,
+      priority: Priority.high,
+      ticker: 'ticker',
+      color: Colors.blue,
+      colorized: true,
+      playSound: true,
+      // sound: RawResourceAndroidNotificationSound('slow_spring_board'),
+    );
+
+    final iOSDetail = DarwinNotificationDetails(
+      sound: 'slow_spring_board.aiff',
+    );
+    final platformDetail =
+    NotificationDetails(android: androidDetail, iOS: iOSDetail);
+    final notificationTitle = message['title'];
+    final notificationBody = message['message'];
+    await flutterLocalNotificationsPlugin.show(0, notificationTitle, notificationBody, platformDetail,payload: jsonEncode(message));
+  }
+}
