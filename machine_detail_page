@@ -1,0 +1,753 @@
+import 'package:cm_app/logic/onekeyboot/machine_detail_logic.dart';
+import 'package:cm_app/res/dimens.dart';
+import 'package:cm_app/res/gaps.dart';
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+
+///@description     机器信息（报警、订单、成本、质量）
+
+class MachineDetailPage extends StatefulWidget {
+  const MachineDetailPage({Key? key});
+
+  @override
+  State<MachineDetailPage> createState() => _MachineDetailPageState();
+}
+
+class _MachineDetailPageState extends State<MachineDetailPage> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  List<Tab> tabs = [
+    Tab(
+      text: '订单信息',
+    ),
+    Tab(
+      text: '成本',
+    ),
+    Tab(
+      text: '质量',
+    ),
+  ];
+
+  String workshop = '';
+
+  final detailLogic = Get.find<MachineDetailLogic>();
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: tabs.length, vsync: this);
+    _getDetailInfo();
+  }
+
+  void _getDetailInfo() async {
+    dynamic args = Get.arguments;
+    print('args' + args['injectionNo']);
+    this.workshop = args['injectionNo'];
+
+    detailLogic.getCurrentInfo(args['injectionNo']);
+    var hasOrder = await detailLogic.getOrderInfo(args['injectionNo']);
+    if (hasOrder && detailLogic.hasOrder.value) {
+      var hasCost = await detailLogic.getCostInfo(args['injectionNo']);
+      // if (hasCost && detailLogic.hasCost.value) {
+      //   detailLogic.getAlarmInfo(args['injectionNo']);
+      // }
+      detailLogic.getQualityInfo(args['injectionNo']);
+    }
+    detailLogic.getAlarmInfo(args['injectionNo']);
+    detailLogic.getMachineInfo(args['injectionNo']);
+    detailLogic.getMoldInfo();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('机台详情'),
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            Obx(() =>
+                /// 报警信息
+                _alarmMessageList(),
+            ),
+            Obx(() =>
+                /// 模具信息
+                _moldInfo(),
+            ),
+            Gaps.vGap12,
+            Container(
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(width: 1, color: Colors.blueGrey))
+              ),
+              child: TabBar(
+                //tabs 的长度超出屏幕宽度后，TabBar，是否可滚动
+                //设置为false tab 将平分宽度，为true tab 将会自适应宽度
+                // isScrollable: false,
+                //设置tab文字得类型
+                labelStyle: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                //设置tab选中得颜色
+                labelColor: Color(0xFF035DFF),
+                //设置tab未选中得颜色
+                unselectedLabelColor: Colors.black45,
+                //设置自定义tab的指示器，CustomUnderlineTabIndicator
+                //若不需要自定义，可直接通过
+                //设置指示器颜色
+                indicatorColor: Color(0xFF035DFF),
+                //indicatorWight 设置指示器厚度
+                indicatorPadding: EdgeInsets.only(left: 10, right: 10),
+                indicatorWeight: 1.5,
+                ///指示器大小计算方式，TabBarIndicatorSize.label跟文字等宽,TabBarIndicatorSize.tab跟每个tab等宽
+                indicatorSize: TabBarIndicatorSize.label,
+                tabs: tabs,
+                controller: _tabController,
+              ),
+            ),
+            Container(
+              height: 600,
+              child: TabBarView(
+                controller: _tabController,
+                children: <Widget>[
+                  Obx(() =>
+                  /// 订单信息
+                  ListView(
+                        physics: NeverScrollableScrollPhysics(),
+                        children: [
+                          _orderInfoItem('当前订单', this.detailLogic.orderNo.value),
+                          _orderInfoItem('订单模具', this.detailLogic.orderMold.value),
+                          _orderInfoItem('订单进度', this.detailLogic.orderProgress.value,
+                          detailLogic.orderProgress.value.isNotEmpty &&
+                              (double.parse((detailLogic.orderProgress.value.replaceAll('%', ''))) > 90)),
+                          _orderInfoItem('客户', this.detailLogic.orderCustomer.value),
+                          _orderInfoItem('计划开始时间', this.detailLogic.planStartTime.value),
+                          _orderInfoItem('计划结束时间', this.detailLogic.planEndTime.value),
+                          _orderInfoItem('产品描述', this.detailLogic.bomName.value),
+                          _orderInfoItem('产品编码', this.detailLogic.product.value)
+                        ],
+                      ),
+                  ),
+                  Obx(() =>
+                  /// 成本
+                  Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            child: _currentAndTargetItem('人力', detailLogic.currentHr.value, detailLogic.gateHr.value),
+                          ),
+                          Container(
+                            child: _currentAndTargetItem('材损', detailLogic.currentMaterialLoss.value, detailLogic.targetMaterialLoss.value),
+                          )
+                        ],
+                      ),
+                      _currentAndTargetItem('周期', detailLogic.currentCycle.value, detailLogic.targetCycle.value, true, detailLogic.targetCycleRange.value),
+                      _currentAndTargetItem('产品单重', detailLogic.currentBomWeight.value, detailLogic.productPieceWeight.value, true, detailLogic.targetProductPieceWeightRange.value),
+                      _currentAndTargetItem('料头重（整模）', detailLogic.currentMaterialHeadWeight.value, detailLogic.targetMaterialHeadWeight.value, true, detailLogic.targetMaterialHeadWeightRange.value)
+                    ],
+                  ),
+                  ),
+                  Obx(() =>
+                  /// 质量
+                  Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            child: _currentAndTargetItem('总良率', detailLogic.allPassRate.value, detailLogic.allTargetPassRate.value),
+                          ),
+                          Container(
+                            child: _currentAndTargetItem('首件次数', detailLogic.firstCheckTimes.value, detailLogic.firstTargetCheckTimes.value),
+                          )
+                        ],
+                      ),
+                      Gaps.vGap10,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            flex: 1,
+                            child: _currentAndTargetItem('IPQC批允收率', detailLogic.ipqcPassRate.value, detailLogic.ipqcTargetPassRate.value),
+                          ),
+                          // Container(
+                          //   child:
+                          // ),
+                          Expanded(
+                            flex: 1,
+                            child: _currentAndTargetItem('FQC批允收率', detailLogic.fqcPassRate.value, detailLogic.fqcTargetPassRate.value),
+                          )
+                          // Container(
+                          //   child:
+                          // )
+                        ],
+                      ),
+                      Gaps.vGap10,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            child: _currentAndTargetItem('当日巡检次数', detailLogic.todayInspectionCheckTimes.value, ''),
+                          ),
+                          Container(
+                            child: _currentAndTargetItem('总巡检次数', detailLogic.inspectionCheckTimes.value, detailLogic.inspectionTargetCheckTimes.value),
+                          )
+                        ],
+                      ),
+                      Gaps.vGap10,
+                      Container(
+                        margin: EdgeInsets.only(left: 0, top: 10, right: 0, bottom: 10),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: <Widget>[
+                            Column(
+                              children: [
+                                Text(
+                                  detailLogic.moldIsDailyOK.value ? '已维护' : '未维护',
+                                  style: TextStyle(
+                                    fontSize: Dimens.font_sp16,
+                                    color: Colors.blueGrey,
+                                  ),
+                                ),
+                                Text(
+                                  '模具维护状态',
+                                  style: TextStyle(
+                                    fontSize: Dimens.font_sp12,
+                                    color: Colors.grey,
+                                  ),
+                                )
+                              ],
+                            ),
+                            Column(
+                              children: [
+                                Text(
+                                  detailLogic.machineIsOK.value ? '已维护' : '未维护',
+                                  style: TextStyle(
+                                    fontSize: Dimens.font_sp16,
+                                    color: Colors.blueGrey,
+                                  ),
+                                ),
+                                Text(
+                                  '设备维护状态',
+                                  style: TextStyle(
+                                    fontSize: Dimens.font_sp12,
+                                    color: Colors.grey,
+                                  ),
+                                )
+                              ],
+                            ),
+                            Column(
+                              children: [
+                                Text(
+                                  detailLogic.processAlarmTimes.value,
+                                  style: TextStyle(
+                                    fontSize: Dimens.font_sp18,
+                                    color: Colors.blueGrey,
+                                  ),
+                                ),
+                                Text(
+                                  '工艺报警次数',
+                                  style: TextStyle(
+                                    fontSize: Dimens.font_sp12,
+                                    color: Colors.grey,
+                                  ),
+                                )
+                              ],
+                            ),
+                          ],
+                        ),
+                      )
+                    ],
+                  )
+                  ),
+                ],
+              ),
+            )
+          ],
+        ),
+      )
+    );
+  }
+
+  Widget _alarmMessageList() {
+    return Container(
+      margin: EdgeInsets.only(left: Dimens.gap_dp4, top: Dimens.gap_dp8, right: Dimens.gap_dp4),
+      height: detailLogic.alarmList.length != 0 ? detailLogic.alarmList.length >= 2 ? 450 : detailLogic.alarmList.length * 250 : 160,
+      decoration: BoxDecoration(
+        // color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Colors.red,
+          width: 2,
+          style: BorderStyle.solid,
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                margin: EdgeInsets.only(left: Dimens.gap_dp16, top: Dimens.gap_dp8),
+                child: Text(
+                  '报警信息',
+                  style: TextStyle(
+                      fontSize: Dimens.font_sp18,
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold),
+                ),
+              )
+            ],
+          ),
+          detailLogic.alarmList.length != 0 ?
+          Expanded(
+            child:ListView.builder(
+                padding: EdgeInsets.only(top: 10, bottom: 10),
+                itemCount: detailLogic.alarmList.length,
+                itemBuilder: (context, index) {
+                  return _alarmMessageDetail(index);
+                })
+          ) : Container(
+            margin: EdgeInsets.only(top: Dimens.gap_dp32),
+            child: Text('无报警',
+            style: TextStyle(
+              fontSize: Dimens.font_sp24,
+              color: Colors.black87
+            ),)
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _alarmMessageDetail(index) {
+    return Container(
+        margin: EdgeInsets.only(
+            left: Dimens.gap_dp16,
+            top: Dimens.gap_dp10,
+            right: Dimens.gap_dp16,
+            bottom: Dimens.gap_dp10),
+        padding: EdgeInsets.only(
+            left: Dimens.gap_dp4,
+            top: Dimens.gap_dp8,
+            right: Dimens.gap_dp4,
+            bottom: Dimens.gap_dp8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          children: [
+            Gaps.vGap10,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '报警代码',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey),
+                ),
+                Text(
+                  detailLogic.alarmList[index]['alarmCode'] ?? '',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.normal,
+                      color: Colors.black),
+                )
+              ],
+            ),
+            Gaps.vGap10,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  flex: 1,
+                  child: Text(
+                    '报警时间',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey),
+                  ),
+                ),
+                Expanded(
+                    flex: 3,
+                    child: Text(
+                      detailLogic.alarmList[index]['alarmTime'] ?? '',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.normal,
+                          color: Colors.black),
+                    ))
+              ],
+            ),
+            Gaps.vGap10,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  flex: 1,
+                  child: Text(
+                    '报警内容',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey),
+                  ),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    detailLogic.alarmList[index]['alarmContent'] ?? '',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.normal,
+                        color: Colors.black),
+                  ),
+                )
+
+              ],
+            ),
+            Gaps.vGap10,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Gaps.hGap4,
+                ElevatedButton(
+                  style: ButtonStyle(
+                    backgroundColor: MaterialStateProperty.all(Colors.green),
+                  ),
+                  onPressed: () async {
+                    await detailLogic.getAlarmDetail(detailLogic.alarmList[index]['alarmCode']);
+                    showSolutionDialog();
+                  },
+                  child: Text(
+                    '解决方法',
+                    style: TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                ),
+              ],
+            )
+          ],
+        ),
+      );
+  }
+
+  Widget _moldInfo() {
+    return Container(
+      margin: EdgeInsets.only(
+          left: Dimens.gap_dp8,
+          top: Dimens.gap_dp16,
+          right: Dimens.gap_dp8,
+          bottom: Dimens.gap_dp10),
+      padding: EdgeInsets.only(
+          left: Dimens.gap_dp4,
+          top: Dimens.gap_dp8,
+          right: Dimens.gap_dp4,
+          bottom: Dimens.gap_dp8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blueGrey, )
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            children: [
+              Text(this.detailLogic.mold.value,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: Dimens.font_sp18,
+                ),),
+              Gaps.vGap10,
+              Text('当前模具')
+            ],
+          ),
+          Column(
+            children: [
+              Text(this.detailLogic.conditionName.value,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: Dimens.font_sp18,
+                ),),
+              Gaps.vGap10,
+              Text('工艺库工艺')
+            ],
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _orderInfoItem(itemName, itemInfo, [bool needWarn = false]) {
+    return Container(
+        margin: EdgeInsets.only(left: Dimens.gap_dp16, top: Dimens.gap_dp8, right: Dimens.gap_dp16, bottom: Dimens.gap_dp8),
+        decoration: BoxDecoration(
+            border:
+            Border(bottom: BorderSide(width: 1, color: Colors.black12))
+        ),
+        child: Column(
+          children: [
+            Gaps.vGap8,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  flex: 1,
+                  child: Text(
+                    itemName,
+                    style: TextStyle(
+                        fontSize: Dimens.font_sp15,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey),
+                  ),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: itemInfo == null
+                      ? Container()
+                      : Text(
+                    itemInfo ?? '',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                        fontSize:  Dimens.font_sp15,
+                        fontWeight: FontWeight.normal,
+                        color: needWarn ? Colors.red : Colors.black),
+                  ),
+                )
+
+              ],
+            ),
+            Gaps.vGap10
+          ],
+        ));
+  }
+
+  Widget _currentAndTargetItem(itemName, String current, String target, [bool hasError = false, String errorNum = '']) {
+    return Container(
+      margin: EdgeInsets.only(
+          left: Dimens.gap_dp16,
+          top: Dimens.gap_dp10,
+          right: Dimens.gap_dp16,
+          bottom: Dimens.gap_dp10),
+      padding: EdgeInsets.only(
+          left: Dimens.gap_dp4,
+          top: Dimens.gap_dp8,
+          right: Dimens.gap_dp4,
+          bottom: Dimens.gap_dp8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: (hasError && current.isNotEmpty && target.isNotEmpty && errorNum.isNotEmpty &&
+            (double.parse(current) > (double.parse(target) + double.parse(errorNum))
+            || double.parse(current) < (double.parse(target) - double.parse(errorNum)) ) ) ? Border.all(
+          color: Colors.red,
+          width: 2,
+          style: BorderStyle.solid
+        ) : Border.all(color: Colors.blueGrey)
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                margin: EdgeInsets.only(left: Dimens.gap_dp16),
+                child: Text(itemName ?? '',
+                  style: TextStyle(
+                    fontSize: Dimens.font_sp18,
+                    fontWeight: FontWeight.w300,
+                  ),
+                ),
+              ),
+              Container()
+            ],
+          ),
+          Gaps.vGap10,
+          Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            Gaps.hGap16,
+            Column(
+              children: [
+                Text(
+                  '当前',
+                  style: TextStyle(
+                    fontSize: Dimens.font_sp10,
+                    color: Colors.grey,
+                  ),
+                ),
+                Gaps.vGap4,
+                Text(
+                  current ?? '',
+                  style: TextStyle(
+                    fontSize: Dimens.font_sp14,
+                    color: (hasError && current.isNotEmpty && target.isNotEmpty && errorNum.isNotEmpty &&
+                        (double.parse(current) > (double.parse(target) + double.parse(errorNum))
+                     || double.parse(current) < (double.parse(target) - double.parse(errorNum)) ) ) ? Colors.red : Colors.blueGrey,
+                  ),
+                ),
+              ],
+            ),
+            //垂直分割线
+            Gaps.hGap16,
+            SizedBox(
+              width: 1,
+              height: Dimens.gap_dp16,
+              child: DecoratedBox(
+                decoration: BoxDecoration(color: Colors.grey),
+              ),
+            ),
+            Gaps.hGap16,
+            Column(
+              children: [
+                Text(
+                  '目标',
+                  style: TextStyle(
+                    fontSize: Dimens.font_sp10,
+                    color: Colors.grey,
+                  ),
+                ),
+                Gaps.vGap4,
+                Text(
+                  target ?? '',
+                  style: TextStyle(
+                    fontSize: Dimens.font_sp14,
+                    color: Colors.blueGrey,
+                  ),
+                ),
+              ],
+            ),
+            Gaps.hGap16,
+            if (hasError)
+              Column(
+                children: [
+                  Gaps.vGap18,
+                  Text('±',style: TextStyle(
+                      fontSize: Dimens.font_sp16,
+                      fontWeight: FontWeight.w400
+                  ))
+                ],
+              ),
+            if (hasError)
+              Gaps.hGap16,
+            if (hasError)
+              Column(
+                children: [
+                  Gaps.vGap18,
+                  Text(errorNum,
+                      style: TextStyle(
+                        fontSize: Dimens.font_sp16,
+                        color: Colors.blueGrey,
+                      )
+                  )
+                ],
+              ),
+            if (hasError)
+              Gaps.hGap16,
+          ],
+        )
+        ],
+      ),
+    );
+  }
+
+  void showSolutionDialog() {
+    showDialog(context: context, builder: (BuildContext context) {
+      return new AlertDialog(
+        contentPadding: EdgeInsets.fromLTRB(0, 0, 0, 0),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(Dimens.gap_dp8))
+        ),
+        title: Container(
+          child: Text('报警解决方案'),
+        ),
+        content:  Obx(() =>
+            Container(
+              width: double.maxFinite,
+              height: detailLogic.alarmDetailList.length != 0 ? detailLogic.alarmDetailList.length > 3 ? 500 : detailLogic.alarmDetailList.length * 200 : 180,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  detailLogic.alarmDetailList.length != 0 ? Expanded(
+                      child: ListView.builder(
+                          padding: EdgeInsets.only(top: 10, bottom: 10),
+                          itemCount: detailLogic.alarmDetailList.length,
+                          itemBuilder: (context, index) {
+                            return _solutionDetail(index);
+                          })
+                  ) : Container(
+                      margin: EdgeInsets.only(top: Dimens.gap_dp32),
+                      child: Text('暂无解决方案',
+                        style: TextStyle(
+                            fontSize: Dimens.font_sp24,
+                            color: Colors.black87
+                        ),)
+                  )
+                ],
+              ),
+            ),
+        ),
+        actions: [],
+      );
+    });
+  }
+
+  Widget _solutionDetail(index) {
+    return Container(
+      margin: EdgeInsets.only(left: Dimens.gap_dp10, top: Dimens.gap_dp8, right: Dimens.gap_dp10, bottom: Dimens.gap_dp8),
+      decoration: BoxDecoration(
+          color: Colors.white,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.black12)
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            flex: 1,
+            child: Container(
+              margin: EdgeInsets.only(left: Dimens.gap_dp10),
+              child: Text('${(index + 1).toString()}.',),
+            ),
+          )
+          ,
+          Expanded(
+            flex: 5,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  margin: EdgeInsets.only(bottom: Dimens.gap_dp8),
+                  child: Text(detailLogic.alarmDetailList[index]['alarm_rootcause'] ?? '',
+                    textAlign: TextAlign.left,
+                    style: TextStyle(
+                        color: Colors.red[600]
+                    ),
+                  ),
+                ),
+                Container(
+                  child: Text(detailLogic.alarmDetailList[index]['alarm_solution'] ?? '',
+                      textAlign: TextAlign.left,
+                      style: TextStyle(
+                          color: Colors.green
+                      )
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
