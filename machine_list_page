@@ -1,0 +1,621 @@
+import 'dart:convert';
+
+import 'package:cm_app/api_service/onekeyboot/machine_list_api.dart';
+import 'package:cm_app/enum/cm_enum.dart';
+import 'package:cm_app/res/dimens.dart';
+import 'package:cm_app/res/gaps.dart';
+import 'package:cm_app/utils/sputils.dart';
+import 'package:cm_app/widgets/onekeyboot/workshop_segment_bar.dart';
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+
+///@description     机台一览
+class MachineListPage extends StatefulWidget {
+  const MachineListPage({Key? key});
+
+  @override
+  State<MachineListPage> createState() => _MachineListPageState();
+}
+
+class _MachineListPageState extends State<MachineListPage>
+    with SingleTickerProviderStateMixin {
+  int _createrId = 0;
+  String currentWorkshop = '';
+  int _currentNotMoreIndex = 1;
+  String totalWorkshop = '';
+  List<dynamic> machineList = [];
+  List<dynamic> planList = [];
+
+  List<Map<String, dynamic>> workshopList = [];
+  List<Map<String, dynamic>> moreWorkshopList = [];
+  List<String> _selectedOptions = [];
+
+  List<String> stateList = ['在产机台', '报警机台', '非一键开机', '条件生产', '更多'];
+  List<int> stateCountList = [0, 0, 0, 0, 0];
+  List<int> valueStatusList = [-1, -1, -1, -1, -1];
+  List<int> lastValueStatusList = [-1, -1, -1, -1, -1];
+  bool _showDrawer = false;
+  var _scaffoldKey = new GlobalKey<ScaffoldState>();
+  List<String> otherStateNameList = ['试模生产中', '正在生产中', '试产中', '手动暂停中', '超订单生产', '开机未生产', '开机校验中', '掉线或关机', '已排机台'];
+  List<String> otherStateStatusList = ['8', '1', '11', '9', '10', '2', '5', '0', '12'];
+
+  Map<String, String> _otherStateSelected = {};
+  List<Map<String, String>> otherStateAndCountList = [];
+
+  List<Tab> tabs = [
+    Tab(
+      text: 'All',
+    ),
+    Tab(
+      text: 'B',
+    ),
+    Tab(
+      text: 'C',
+    ),
+    Tab(
+      text: 'GMP',
+    ),
+    Tab(
+      text: '嘉兴',
+    ),
+    Tab(
+      text: '更多',
+    ),
+  ];
+  late TabController _tabController;
+  bool _showDropdown = false;
+  List<Map<String, dynamic>> effectiveList = [];
+
+  void _onItemTapped(int index) async{
+    print('tabIndex:' + index.toString());
+    if (index != tabs.length - 1 && index != 0) {
+      _showDropdown = false;
+      // _selectedOptions = [];
+      currentWorkshop = workshopList[index - 1]['workshop'];
+      await _getMachineList(workshopList[index - 1]['workshop']);
+      await _getTodayPlan(workshopList[index - 1]['workshop'], _createrId);
+      _currentNotMoreIndex = index;
+    }
+    if (index == tabs.length - 1 && effectiveList.length > 4 ) {
+      setState(() {
+        _showDropdown = true;
+      });
+    }
+    if (index == 0) {
+      // 处理All
+      _currentNotMoreIndex = 0;
+      print(totalWorkshop);
+      currentWorkshop = totalWorkshop;
+      await _getMachineList(totalWorkshop);
+      await _getTodayPlan(totalWorkshop, _createrId);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    handleWorkshopList();
+    _tabController =
+        TabController(length: tabs.length, vsync: this, initialIndex: 1);
+    currentWorkshop = 'B';
+    initGetInfo();
+  }
+
+  void initGetInfo() async {
+    _createrId = SPUtils.getUserId();
+    await _getMachineList(currentWorkshop);
+    await _getTodayPlan(currentWorkshop, _createrId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+        key: _scaffoldKey,
+        appBar: AppBar(
+          title: Text('一键开机'),
+          actions: [
+            Icon(
+              Icons.menu,
+              size: 0,
+            )
+          ],
+        ),
+        body: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            Container(
+              child: TabBar(
+                //tabs 的长度超出屏幕宽度后，TabBar，是否可滚动
+                //设置为false tab 将平分宽度，为true tab 将会自适应宽度
+                // isScrollable: true,
+                //设置tab文字得类型
+                labelStyle:
+                TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                //设置tab选中得颜色
+                labelColor: Color(0xFF035DFF),
+                //设置tab未选中得颜色
+                unselectedLabelColor: Colors.black45,
+                //设置自定义tab的指示器，CustomUnderlineTabIndicator
+                //若不需要自定义，可直接通过
+                //设置指示器颜色
+                indicatorColor: Color(0xFF035DFF),
+                //indicatorWight 设置指示器厚度
+                indicatorPadding: EdgeInsets.only(left: 10, right: 10),
+                indicatorWeight: 1.5,
+
+                ///指示器大小计算方式，TabBarIndicatorSize.label跟文字等宽,TabBarIndicatorSize.tab跟每个tab等宽
+                indicatorSize: TabBarIndicatorSize.tab,
+                tabs: tabs,
+                controller: _tabController,
+                onTap: _onItemTapped,
+              ),
+            ),
+            if (_showDropdown && tabs.length > 4)
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonWidget(
+                      options: moreWorkshopList.map((e) => e['name']).toList(),
+                      isMultipleSelection: false,
+                      buttonWidth: 100,
+                      buttonHeight: 40,
+                      selectedOptions: _selectedOptions,
+                      onReset: handleReset,
+                      // 将 handleReset 函数传递给 onReset 回调函数
+                      onApply: (selected) => handleApply(
+                          selected), // 将 handleApply 函数传递给 onApply 回调函数
+                    ),
+                  ),
+                ],
+              ),
+            Gaps.vGap8,
+            Center(
+              // decoration: BoxDecoration(color: Colors.red),
+              child: MySegmentedControlWithDropdown(
+                segments: stateList,
+                segmentCounts: stateCountList,
+                segmentColors: [
+                  Colors.green,
+                  Colors.red,
+                  Colors.lightBlueAccent,
+                  Colors.deepOrangeAccent,
+                  Colors.black87
+                ],
+                initialSelectedIndex: -1,
+                onValueChanged: (values) async{
+                  // lastValueStatusList = values;
+                  print(values);
+                  print(values.indexOf(0));
+                  if (values.indexOf(0) != values.length - 1) {
+                    this.valueStatusList = values;
+                    stateCountList[4] = 0;
+                    stateList[4] = '更多';
+                    _otherStateSelected = {};
+                    await _getMachineList(currentWorkshop);
+                    await _getTodayPlan(currentWorkshop, _createrId);
+                  } else {
+                    _showDrawer = true;
+                    print('点击更多显示drawer');
+                    print(_showDrawer);
+                    _scaffoldKey.currentState!.openEndDrawer();
+                  }
+                },
+              ),
+            ),
+            Expanded(
+              child: TabBarView(
+                physics: NeverScrollableScrollPhysics(),
+                controller: _tabController,
+                children: List.generate(
+                  tabs.length,
+                      (index) {
+                    /// 机台信息
+                    return ListView.builder(
+                      padding: EdgeInsets.only(top: 10, bottom: 10),
+                      itemCount: this.machineList.length,
+                      itemBuilder: (context, index) {
+                        return _machineInfoItem(index);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+        endDrawer: MyDrawer(
+          defaultSelection: _otherStateSelected,
+          radioConfigs: otherStateAndCountList,
+          onSelectionChanged: (value) {
+            print(value);
+            if (value.isNotEmpty) {
+              _otherStateSelected = otherStateAndCountList.where((e) => e['status'] == value['status']).toList()[0];
+              stateCountList[4] =  int.parse(_otherStateSelected['count']!);
+              stateList[4] = _otherStateSelected['name']!;
+              setState(() {
+                if (_otherStateSelected['status'] == '12') {
+                  // plan 筛选
+                  this.machineList = this.machineList.where((e) => this.planList.any((p) => p['injectionCode'] == e['injectionNo'])).toList();
+                } else {
+                  this.machineList = this.machineList.where(
+                          (e) => e['status'] == int.parse((_otherStateSelected['status'] as String))
+                  ).toList();
+                }
+              });
+            }
+          },
+        ),
+        onEndDrawerChanged: (isShow) {
+          print(isShow);
+          print(_otherStateSelected);
+        });
+  }
+
+  Widget _machineInfoItem(index) {
+    return InkWell(
+      onTap: () {
+        /// 跳转到详情页
+        Get.toNamed('/onekeyboot/machine_detail_page', arguments: {
+          'injectionNo': this.machineList[index]['injectionNo'] ?? ''
+        });
+      },
+      child: Container(
+        margin: EdgeInsets.all(Dimens.gap_dp10),
+        padding: EdgeInsets.all(Dimens.gap_dp16),
+        height: 120,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8.0),
+          border: Border.all(
+              color: this.machineList[index]['alarm'] == 1
+                  ? Colors.red
+                  : Colors.black12),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                    child: Center(
+                      child: Text(
+                        this.machineList[index]['injectionNo'] ?? '',
+                        style: TextStyle(
+                            fontSize: Dimens.gap_dp24, fontWeight: FontWeight.bold),
+                      ),
+                    )),
+                Expanded(
+                    child: Center(
+                      child: Text(
+                        (ManufacturerType.getName(
+                            this.machineList[index]['manufacturer']) ??
+                            ''),
+                        style: TextStyle(
+                            fontSize: Dimens.gap_dp16, fontWeight: FontWeight.bold),
+                      ),
+                    )),
+                Expanded(
+                    child: Center(
+                        child: Icon(
+                          Icons.warning_amber_outlined,
+                          color: this.machineList[index]['alarm'] == 1
+                              ? Colors.red
+                              : Colors.black26,
+                          size: Dimens.gap_dp32,
+                        ))),
+              ],
+            ),
+            Row(
+              children: [
+                Expanded(
+                    child: Center(
+                        child: Icon(
+                          (MachineState.getIcon(this.machineList[index]['status'])
+                              ?.icon),
+                          color:
+                          (MachineState.getIcon(this.machineList[index]['status'])
+                              ?.color),
+                          size: Dimens.gap_dp32,
+                        ))),
+                Expanded(
+                    child: Center(
+                      child: Text(
+                        (MachineState.getValue(this.machineList[index]['status']) ??
+                            ''),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: (MachineState.getIcon(
+                                this.machineList[index]['status'])
+                                ?.color),
+                            fontSize: Dimens.gap_dp16,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    )),
+                Expanded(
+                    child: Center(
+                        child: Icon(
+                          Icons.calendar_month_outlined,
+                          color: _getMachineScheduleColor(index),
+                          size: Dimens.gap_dp32,
+                        ))),
+              ],
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _getMachineList(workshop) async {
+    var response = await MachineListApi.getList(workshop);
+    if (response['code'] == 0) {
+      setState(() {
+        this.machineList = response['data'] as List<dynamic>;
+        var producingCount = this
+            .machineList
+            .where((e) =>
+        e['status'] == MachineState.producing.number ||
+            e['status'] == MachineState.in_trial_producing.number ||
+            e['status'] == MachineState.condition_producing.number ||
+            e['status'] == MachineState.non_onekeyboot_producing.number ||
+            e['status'] == MachineState.over_producing.number ||
+            e['status'] == MachineState.verifying_startup.number)
+            .length;
+        this.stateCountList[0] = producingCount;
+        var warningCount =
+            this.machineList.where((e) => e['alarm'] == 1).length;
+        this.stateCountList[1] = warningCount;
+        var nonOnekeybootProducingCount = this
+            .machineList
+            .where((e) =>
+        e['status'] == MachineState.non_onekeyboot_producing.number)
+            .length;
+        this.stateCountList[2] = nonOnekeybootProducingCount;
+        var conditionProducingCount = this
+            .machineList
+            .where(
+                (e) => e['status'] == MachineState.condition_producing.number)
+            .length;
+        this.stateCountList[3] = conditionProducingCount;
+      });
+      // 处理其他筛选的时候的初始化个数和名称
+      handleOtherStatus();
+      print('aaaaaa' +valueStatusList.indexOf(0).toString());
+      // 筛选状态
+      if (valueStatusList.indexOf(0) == -1) {
+        return;
+      }
+      handleMachineStatus(valueStatusList.indexOf(0));
+    }
+  }
+
+  Future<void> _getTodayPlan(workShop, createrId) async {
+    var response = await MachineListApi.getPlanList(workShop, createrId);
+    if (response['code'] == 200) {
+      setState(() {
+        this.planList = response['data'] as List<dynamic>;
+        this.otherStateAndCountList.last['count'] = planList.length.toString();
+      });
+    }
+  }
+
+  Color _getMachineScheduleColor(int index) {
+    Color renderColor = Colors.black26;
+    // 1.拿到plan 对应机台Code list
+    final List planCodeList =
+    this.planList.map((e) => e['injectionCode']).toList();
+    final List progressList =
+    this.planList.map((e) => e['orderProgress']).toList();
+    // 2. 拿到车间 机台Code list
+    final List machineCodeList =
+    this.machineList.map((e) => e['injectionNo']).toList();
+    if (planCodeList.contains(machineCodeList[index])) {
+      final progress = double.parse(
+          progressList[planCodeList.indexOf(machineCodeList[index])]
+              .replaceAll('%', ''));
+      if (progress < 80.0 && progress >= 0.0) {
+        renderColor = Colors.green;
+      } else if (progress > 90.0) {
+        renderColor = Colors.red;
+      } else {
+        renderColor = Colors.orange;
+      }
+    } else {
+      renderColor = Colors.black26;
+    }
+
+    return renderColor;
+  }
+
+  void handleReset() {
+    // 处理重置按钮被点击时的逻辑
+    _selectedOptions = [];
+  }
+
+  void handleApply(List<String> selected) async {
+    setState(() {
+      _showDropdown = false;
+      _selectedOptions = selected;
+    });
+
+    // 处理确定按钮被点击时的逻辑
+    if (selected.length != 0) {
+      print("Selected options: ${_selectedOptions.join(", ")}");
+
+      setState(() {
+        tabs.last = Tab(
+          text: selected[0],
+        );
+        currentWorkshop = moreWorkshopList
+            .where((e) => e['name'] == selected?.first)
+            .toList()
+            ?.first['workshop'];
+      });
+      await _getMachineList(currentWorkshop);
+      await _getTodayPlan(currentWorkshop, _createrId);
+    } else {
+      setState(() {
+        tabs.last = Tab(
+          text: '更多',
+        );
+        _showDropdown = false;
+        _tabController.animateTo(_currentNotMoreIndex);
+        currentWorkshop = workshopList[_currentNotMoreIndex - 1]['workshop'];
+      });
+      await _getMachineList(currentWorkshop);
+      await _getTodayPlan(currentWorkshop, _createrId);
+    }
+  }
+
+  void handleMachineStatus(int index) async {
+    switch (index) {
+      case 0:
+      // 在产机台
+        setState(() {
+          this.machineList = this
+              .machineList
+              .where((e) =>
+          e['status'] == MachineState.producing.number ||
+              e['status'] == MachineState.in_trial_producing.number ||
+              e['status'] == MachineState.condition_producing.number ||
+              e['status'] == MachineState.non_onekeyboot_producing.number ||
+              e['status'] == MachineState.over_producing.number ||
+              e['status'] == MachineState.verifying_startup.number)
+              .toList();
+        });
+        break;
+      case 1:
+      // 报警机台
+        setState(() {
+          this.machineList =
+              this.machineList.where((e) => e['alarm'] == 1).toList();
+        });
+        break;
+      case 2:
+      // 非一键开机
+        setState(() {
+          this.machineList = this
+              .machineList
+              .where((e) =>
+          e['status'] == MachineState.non_onekeyboot_producing.number)
+              .toList();
+        });
+        break;
+      case 3:
+      // 条件生产
+        setState(() {
+          this.machineList = this
+              .machineList
+              .where(
+                  (e) => e['status'] == MachineState.condition_producing.number)
+              .toList();
+        });
+        break;
+      case 4:
+      // 更多
+        setState(() {
+          if (_otherStateSelected['status'] == '12') {
+            // plan 筛选
+            this.machineList = this.machineList.where((e) => this.planList.any((p) => p['injectionCode'] == e['injectionNo'])).toList();
+          } else {
+            this.machineList = this.machineList.where(
+                    (e) => e['status'] == int.parse((_otherStateSelected['status'] as String))
+            ).toList();
+          }
+        });
+        break;
+      case -1:
+      // 条件重置
+        await _getMachineList(currentWorkshop);
+        await _getTodayPlan(currentWorkshop, _createrId);
+        break;
+    }
+  }
+
+  void handleOtherStatus() {
+    otherStateAndCountList = [];
+    List<Map<String, String>> mapList = [];
+    List<String> otherStatusCountList = [];
+    var trialMoldProducingCount = this.machineList.where((e) => e['status'] == MachineState.trial_mold_producing.number).length.toString();
+    otherStatusCountList.add(trialMoldProducingCount);
+    var producingCount =
+    this.machineList.where((e) => e['status'] == MachineState.producing.number).length.toString();
+    otherStatusCountList.add(producingCount);
+    var inTrialProducingCount = this.machineList.where((e) => e['status'] == MachineState.in_trial_producing.number).length.toString();
+    otherStatusCountList.add(inTrialProducingCount);
+    var manualPauseCount = this.machineList.where((e) => e['status'] == MachineState.manual_pause.number).length.toString();
+    otherStatusCountList.add(manualPauseCount);
+    var overProducingCount = this.machineList.where((e) => e['status'] == MachineState.over_producing.number).length.toString();
+    otherStatusCountList.add(overProducingCount);
+    var startWithoutProducingCount = this.machineList.where((e) => e['status'] == MachineState.start_without_producing.number).length.toString();
+    otherStatusCountList.add(startWithoutProducingCount);
+    var verifyingStartupCount = this.machineList.where((e) => e['status'] == MachineState.verifying_startup.number).length.toString();
+    otherStatusCountList.add(verifyingStartupCount);
+    var droppedCount = this.machineList.where((e) => e['status'] == MachineState.dropped.number).length.toString();
+    otherStatusCountList.add(droppedCount);
+
+    for (int i = 0; i < otherStateNameList.length - 1; i++) {
+      mapList.add({'name': otherStateNameList[i], 'status': otherStateStatusList[i], 'count': otherStatusCountList[i]});
+    }
+
+    mapList.add({'name': otherStateNameList.last, 'status': otherStateStatusList.last, 'count': planList.length.toString()});
+
+    otherStateAndCountList = mapList;
+  }
+
+  void handleWorkshopList() {
+    List<String> myWorkshopList = SPUtils.getWorkshopList();
+    List<Map<String, dynamic>> mapList = [];
+    for (String str in myWorkshopList) {
+      Map<String, dynamic> myMap = json.decode(str);
+      myMap['name'] = (myMap['name'] as String).replaceAll('车间', '');
+      mapList.add(myMap);
+    }
+    mapList = mapList.where((e) => e['isShow'] == 1).toList();
+    print(mapList);
+
+    // {"workshop":"B,C,GMP,JX,JIAAN,OPPLE,LILAI,MOFAN,CNC,组装,镭雕,移印,创元,"}
+
+    setState(() {
+      effectiveList = mapList;
+      if (mapList.length > 4) {
+        totalWorkshop = mapList.map((e) => e['workshop']).toList().join(',');
+        this.workshopList = mapList.sublist(0, 4);
+        print(this.workshopList);
+        this.moreWorkshopList = mapList.sublist(4);
+        for (int i = 0; i < workshopList.length; i++) {
+          tabs.setAll(i + 1, [
+            Tab(
+              text: workshopList[i]['name'],
+            )
+          ]);
+        }
+      } else {
+        totalWorkshop = mapList.map((e) => e['workshop']).toList().join(',');
+        this.workshopList = mapList.sublist(0, mapList.length);
+        print(this.workshopList);
+        this.moreWorkshopList = mapList.sublist(mapList.length);
+        tabs = [
+          Tab(
+            text: 'All',
+          )
+        ];
+        for (int i = 0; i < workshopList.length; i++) {
+          tabs.add(Tab(
+            text: workshopList[i]['name'],
+          ));
+        }
+        // tabs.add(Tab(
+        //   text: '更多',
+        // ));
+      }
+
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+}
