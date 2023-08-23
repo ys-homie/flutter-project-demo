@@ -1,0 +1,233 @@
+import 'package:cm_app/api_service/onekeyboot/machine_detail_api.dart';
+import 'package:cm_app/enum/cm_enum.dart';
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+
+///@description     xxxx
+
+class MachineDetailLogic extends GetxController {
+  var mold = ''.obs;
+  var conditionName = ''.obs;
+
+
+  var hasOrder = false.obs;
+  var hasCost = false.obs;
+  var orderInfo = <String,dynamic>{}.obs;
+  var orderNo = ''.obs;
+  var orderMold = ''.obs;
+  var orderProgress = ''.obs;
+  var orderCustomer = ''.obs;
+  var planStartTime = ''.obs;
+  var planEndTime = ''.obs;
+  var bomName = ''.obs;
+  var product = ''.obs;
+
+
+  var currentHr = ''.obs;
+  var gateHr = ''.obs;
+
+  var currentCycle = ''.obs;
+  var targetCycle = ''.obs;
+  var targetCycleRange = ''.obs;
+
+  var currentMaterialLoss = ''.obs;
+  var targetMaterialLoss = ''.obs;
+
+  var currentBomWeight = ''.obs;
+  var productPieceWeight = ''.obs;
+  var targetProductPieceWeightRange = ''.obs;
+
+  var currentMaterialHeadWeight = ''.obs;
+  var targetMaterialHeadWeight = ''.obs;
+  var targetMaterialHeadWeightRange = ''.obs;
+
+
+  var allPassRate = ''.obs;
+  var allTargetPassRate = ''.obs;
+  var ipqcPassRate = ''.obs;
+  var ipqcTargetPassRate = ''.obs;
+  var fqcPassRate = ''.obs;
+  var fqcTargetPassRate = ''.obs;
+  var firstCheckTimes = ''.obs;
+  var firstTargetCheckTimes = ''.obs;
+  var todayInspectionCheckTimes = ''.obs;
+  var inspectionCheckTimes = ''.obs;
+  var inspectionTargetCheckTimes = ''.obs;
+  var processAlarmTimes = ''.obs;
+
+  var moldIsDailyOK = false.obs;
+  var machineIsOK = false.obs;
+
+  var alarmList = [].obs;
+  var alarmDetailList = [].obs;
+
+  Future<bool> getCurrentInfo(String workshop) async {
+    var response = await MachineDetailApi.getCurrentInfo(workshop);
+    if (response['code'] == 0) {
+      mold.value = response['data']['mold'];
+      conditionName.value = response['data']['conditionName'];
+    }
+    return response['code'] == 0;
+  }
+
+  Future<bool> getOrderInfo(String workshop) async {
+    var response = await MachineDetailApi.getOrderInfo(workshop);
+    if (response['code'] == 200) {
+      var dataList = response['data'] as List<dynamic>;
+      if (dataList.length != 0) {
+        hasOrder.value = true;
+        orderInfo.value = dataList[0];
+        orderNo.value = dataList[0]['orderNo'];
+        orderMold.value = dataList[0]['mold'];
+        orderProgress.value = dataList[0]['orderProgress'];
+        orderCustomer.value = dataList[0]['customer'];
+        planStartTime.value = dataList[0]['planStartTime'];
+        planEndTime.value = dataList[0]['planEndTime'];
+        bomName.value = dataList[0]['bomName'];
+        product.value = dataList[0]['product'];
+
+        currentHr.value = dataList[0]['currentHr'];
+        currentBomWeight.value = dataList[0]['currentBomWeight'];
+        currentMaterialHeadWeight.value = dataList[0]['currentMaterialHeadWeight'];
+      } else {
+        hasOrder.value = false;
+      }
+    }
+    return response['code'] == 200;
+  }
+
+  Future<bool> getCostInfo(String workshop) async {
+    var response = await MachineDetailApi.getCostInfo(workshop, product.value, orderMold.value, orderNo.value);
+    if (response['code'] == 0) {
+      gateHr.value = response['data']['gatehr'];
+      currentCycle.value = response['data']['currentCycle'].toString();
+      targetCycle.value = response['data']['targetCycle'].toString();
+      targetCycleRange.value = response['data']['targetCycleRange'];
+      currentMaterialLoss.value = response['data']['currentMaterialLoss'];
+      targetMaterialLoss.value = response['data']['targetMaterialLoss'];
+      productPieceWeight.value = response['data']['productPieceWeight'].toString();
+      targetProductPieceWeightRange.value = response['data']['targetProductPieceWeightRange'].toString();
+      targetMaterialHeadWeight.value = response['data']['targetMaterialHeadWeight'].toString();
+      targetMaterialHeadWeightRange.value = response['data']['targetMaterialHeadWeightRange'].toString();
+      hasCost.value = true;
+    } else {
+      hasCost.value = false;
+    }
+    return response['code'] == 0;
+  }
+  
+  Future<bool> getQualityInfo(String workshop) async {
+    var response = await MachineDetailApi.getQualityInfo(workshop, orderMold.value, orderInfo.value);
+    allPassRate.value = response['allPassRate'];
+    allTargetPassRate.value = response['allTargetPassRate'];
+    ipqcPassRate.value = response['ipqcPassRate'].toString();
+    ipqcTargetPassRate.value = response['ipqcTargetPassRate'];
+    fqcPassRate.value = response['fqcPassRate'].toString();
+    fqcTargetPassRate.value = response['fqcTargetPassRate'];
+    firstCheckTimes.value = response['firstCheckTimes'].toString();
+    firstTargetCheckTimes.value = response['firstTargetCheckTimes'].toString();
+    todayInspectionCheckTimes.value = response['todayInspectionCheckTimes'].toString();
+    inspectionCheckTimes.value = response['inspectionCheckTimes'].toString();
+    inspectionTargetCheckTimes.value = response['inspectionTargetCheckTimes'].toString();
+    processAlarmTimes.value = response['processAlarmTimes'].toString();
+
+    return true;
+  }
+
+  Future<bool> getMoldInfo() async {
+    var response = await MachineDetailApi.getMoldInfo(orderMold.value);
+    if (response['code'] == 200) {
+      var recordList = response['data']['records'] as List<dynamic>;
+      if (recordList.length != 0) {
+        moldIsDailyOK.value = recordList[0]['isDailyOk'] == 2;
+      }
+    }
+    return response['code'] == 200;
+  }
+
+  Future<bool> getMachineInfo(String workshop) async {
+    var response = await MachineDetailApi.getMachineInfo(workshop);
+    if (response['code'] == 200) {
+      var recordList = response['data']['records'] as List<dynamic>;
+      if (recordList.length != 0) {
+        machineIsOK.value = recordList[0]['isOk'] == 0;
+      }
+    }
+    return response['code'] == 200;
+  }
+
+  Future<bool> getAlarmInfo(String workshop) async {
+    var response = await MachineDetailApi.getAlarmInfo(workshop);
+    var alaList = [];
+    if (response['code'] == 0) {
+      var dataList = response['data'] as List<dynamic>;
+      if (dataList.length != 0) {
+        dataList.forEach((e) {
+          var alarm = <String, String>{};
+          alarm['alarmCode'] = e['alarm_code'];
+          alarm['alarmContent'] = e['alarm_content'];
+          alarm['alarmTime'] = e['alarm_time'];
+          alaList.add(alarm);
+        });
+      }
+    }
+
+    if (orderProgress.value.isNotEmpty) {
+      if (double.parse((orderProgress.value.replaceAll('%', ''))) > 90) {
+        alaList.add({'alarmCode': MachineAlarmType.E6001.alarmCode,
+          'alarmContent': MachineAlarmType.E6001.alarmContent,
+          'alarmTime': MachineAlarmType.E6001.alarmTime});
+      }
+    }
+
+    if (currentCycle.value.isNotEmpty && targetCycle.value.isNotEmpty && targetCycleRange.value.isNotEmpty) {
+      if (double.parse(currentCycle.value) > double.parse(targetCycle.value) + double.parse(targetCycleRange.value)) {
+        alaList.add({'alarmCode': MachineAlarmType.E5007UP.alarmCode,
+          'alarmContent': MachineAlarmType.E5007UP.alarmContent,
+          'alarmTime': MachineAlarmType.E5007UP.alarmTime});
+      } else if (double.parse(currentCycle.value) < double.parse(targetCycle.value) - double.parse(targetCycleRange.value)) {
+        alaList.add({'alarmCode': MachineAlarmType.E5007DOWN.alarmCode,
+          'alarmContent': MachineAlarmType.E5007DOWN.alarmContent,
+          'alarmTime': MachineAlarmType.E5007DOWN.alarmTime});
+      }
+    }
+
+    if (currentBomWeight.value.isNotEmpty && productPieceWeight.value.isNotEmpty && targetProductPieceWeightRange.value.isNotEmpty) {
+      if (double.parse(currentBomWeight.value) > double.parse(productPieceWeight.value) + double.parse(targetProductPieceWeightRange.value)) {
+        alaList.add({'alarmCode': MachineAlarmType.E5008UP.alarmCode,
+          'alarmContent': MachineAlarmType.E5008UP.alarmContent,
+          'alarmTime': MachineAlarmType.E5008UP.alarmTime});
+      } else if (double.parse(currentBomWeight.value) < double.parse(productPieceWeight.value) - double.parse(targetProductPieceWeightRange.value)) {
+        alaList.add({'alarmCode': MachineAlarmType.E5008DOWN.alarmCode,
+          'alarmContent': MachineAlarmType.E5008DOWN.alarmContent,
+          'alarmTime': MachineAlarmType.E5008DOWN.alarmTime});
+      }
+    }
+
+    if (currentMaterialHeadWeight.value.isNotEmpty && targetMaterialHeadWeight.value.isNotEmpty && targetMaterialHeadWeightRange.value.isNotEmpty) {
+      if (double.parse(currentMaterialHeadWeight.value) > double.parse(targetMaterialHeadWeight.value) + double.parse(targetMaterialHeadWeightRange.value)) {
+        alaList.add({'alarmCode': MachineAlarmType.E5009UP.alarmCode,
+          'alarmContent': MachineAlarmType.E5009UP.alarmContent,
+          'alarmTime': MachineAlarmType.E5009UP.alarmTime});
+      } else if (double.parse(currentMaterialHeadWeight.value) < double.parse(targetMaterialHeadWeight.value) - double.parse(targetMaterialHeadWeightRange.value)) {
+        alaList.add({'alarmCode': MachineAlarmType.E5009DOWN.alarmCode,
+          'alarmContent': MachineAlarmType.E5009DOWN.alarmContent,
+          'alarmTime': MachineAlarmType.E5009DOWN.alarmTime});
+      }
+    }
+
+    alarmList.value = alaList;
+
+
+    return response['code'] == 0;
+  }
+
+  Future<bool> getAlarmDetail(String alarmCode) async {
+    var response = await MachineDetailApi.getAlarmDetail(alarmCode);
+    if (response['code'] == 0) {
+      var dataList = response['data'] as List<dynamic>;
+      alarmDetailList.value = dataList;
+    }
+    return response['code'] == 0;
+  }
+}
